@@ -1,0 +1,74 @@
+﻿rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isTripMember(tripId) {
+      return isSignedIn()
+        && request.auth.uid in get(/databases/$(database)/documents/trips/$(tripId)).data.memberIds;
+    }
+
+    function isTripOwner(tripId) {
+      return isSignedIn()
+        && get(/databases/$(database)/documents/trips/$(tripId)).data.ownerId == request.auth.uid;
+    }
+
+    function isJoiningSelf() {
+      return isSignedIn()
+        && !(request.auth.uid in resource.data.memberIds)
+        && request.auth.uid in request.resource.data.memberIds
+        && request.resource.data.memberIds.hasAll(resource.data.memberIds)
+        && request.resource.data.memberIds.size() == resource.data.memberIds.size() + 1
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberIds', 'updatedAt']);
+    }
+
+    match /users/{userId} {
+      allow read: if isSignedIn() && request.auth.uid == userId;
+      allow create, update: if isSignedIn()
+        && request.auth.uid == userId
+        && request.resource.data.id == userId;
+    }
+
+    match /inviteCodes/{inviteCode} {
+      allow get: if isSignedIn();
+      allow list: if false;
+      allow create: if isSignedIn()
+        && request.resource.data.code == inviteCode
+        && request.resource.data.ownerId == request.auth.uid;
+      allow update: if false;
+      allow delete: if isSignedIn() && resource.data.ownerId == request.auth.uid;
+    }
+
+    match /trips/{tripId} {
+      allow read: if isSignedIn() && request.auth.uid in resource.data.memberIds;
+      allow create: if isSignedIn()
+        && request.resource.data.id == tripId
+        && request.resource.data.ownerId == request.auth.uid
+        && request.auth.uid in request.resource.data.memberIds;
+      allow update: if isTripOwner(tripId) || isJoiningSelf();
+      allow delete: if isTripOwner(tripId);
+
+      match /members/{memberId} {
+        allow read: if isTripMember(tripId);
+        allow create: if isTripOwner(tripId) || (isSignedIn() && request.auth.uid == memberId);
+        allow update, delete: if isTripOwner(tripId);
+      }
+
+      match /scheduleItems/{scheduleItemId} {
+        allow read, write: if isTripMember(tripId);
+      }
+
+      match /packingItems/{packingItemId} {
+        allow read, write: if isTripMember(tripId);
+      }
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
+

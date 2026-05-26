@@ -1,0 +1,14 @@
+.gradle/
+.gradle-local/
+build/
+app/build/
+local.properties
+*.iml
+.idea/
+gradle-*.zip
+
+window*.xml
+tripmate_screen.png
+*.xlsx
+대만_여행_일정_정리.md
+/*.md
