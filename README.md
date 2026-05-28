@@ -6,16 +6,16 @@
 
 휴대폰에서 아래 링크를 누르면 GitHub Releases에 첨부된 APK를 직접 다운로드할 수 있습니다.
 
-[TripMate v0.1.0 APK 다운로드](https://github.com/kcycoding/tripmate/releases/download/v0.1.0/tripmate-v0.1.0.apk)
+[TripMate v0.1.1 APK 다운로드](https://github.com/kcycoding/tripmate/releases/download/v0.1.1/tripmate-v0.1.1.apk)
 
-릴리즈 화면에서 받으려면 아래 페이지로 이동한 뒤 `Assets`의 `tripmate-v0.1.0.apk`를 누르세요.
+릴리즈 화면에서 받으려면 아래 페이지로 이동한 뒤 `Assets`의 `tripmate-v0.1.1.apk`를 누르세요.
 
-[TripMate v0.1.0 Release](https://github.com/kcycoding/tripmate/releases/tag/v0.1.0)
+[TripMate v0.1.1 Release](https://github.com/kcycoding/tripmate/releases/tag/v0.1.1)
 
 ## 설치 방법
 
 1. 휴대폰에서 APK 다운로드 링크를 엽니다.
-2. `tripmate-v0.1.0.apk` 파일을 다운로드합니다.
+2. `tripmate-v0.1.1.apk` 파일을 다운로드합니다.
 3. 다운로드한 APK 파일을 엽니다.
 4. Android가 `알 수 없는 앱 설치` 권한을 요구하면 허용합니다.
 5. 설치 후 Google 계정으로 로그인합니다.
@@ -35,11 +35,12 @@
 
 ## 현재 버전
 
-- Version name: `0.1.0`
-- Version code: `1`
+- Version name: `0.1.1`
+- Version code: `2`
 - Package name: `com.tripmate.app`
-- GitHub Release: `https://github.com/kcycoding/tripmate/releases/tag/v0.1.0`
+- GitHub Release: `https://github.com/kcycoding/tripmate/releases/tag/v0.1.1`
 
 ## 주의 사항
 
 이 APK는 개발/테스트용 APK입니다. Play Store 정식 배포용 APK/AAB는 별도 서명 설정 후 생성해야 합니다.
+
