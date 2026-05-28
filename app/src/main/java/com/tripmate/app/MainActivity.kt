@@ -35,6 +35,7 @@ import com.tripmate.app.ui.packing.PackingUiState
 import com.tripmate.app.ui.packing.PackingViewModel
 import com.tripmate.app.ui.schedule.ScheduleUiState
 import com.tripmate.app.ui.schedule.ScheduleViewModel
+import com.tripmate.app.ui.schedule.ScheduleEditorScreen
 import com.tripmate.app.ui.schedule.TripDetailScreen
 import com.tripmate.app.ui.theme.TripMateTheme
 import com.tripmate.app.ui.trip.CreateTripScreen
@@ -49,7 +50,8 @@ private enum class AppScreen {
     CreateTrip,
     EditTrip,
     JoinTrip,
-    TripDetail
+    TripDetail,
+    ScheduleEditor
 }
 
 class MainActivity : ComponentActivity() {
@@ -118,6 +120,7 @@ class MainActivity : ComponentActivity() {
                     onObserveTrips = tripListViewModel::observeTrips,
                     onObserveSchedule = scheduleViewModel::observeTrip,
                     onObservePacking = packingViewModel::observeTrip,
+                    onScheduleStartCreate = scheduleViewModel::startCreate,
                     onScheduleDateChange = scheduleViewModel::updateDate,
                     onScheduleTimeChange = scheduleViewModel::updateTime,
                     onSchedulePlaceNameChange = scheduleViewModel::updatePlaceName,
@@ -128,9 +131,9 @@ class MainActivity : ComponentActivity() {
                     onScheduleTravelTimeMemoChange = scheduleViewModel::updateTravelTimeMemo,
                     onScheduleSave = scheduleViewModel::save,
                     onScheduleEdit = scheduleViewModel::startEdit,
-                    onScheduleCancelEdit = scheduleViewModel::cancelEdit,
                     onScheduleDelete = scheduleViewModel::delete,
                     onScheduleMove = scheduleViewModel::move,
+                    onScheduleSaved = scheduleViewModel::resetSaved,
                     onScheduleErrorShown = scheduleViewModel::clearError,
                     onPackingTitleChange = packingViewModel::updateNewItemTitle,
                     onPackingAdd = packingViewModel::add,
@@ -189,6 +192,7 @@ fun TripMateApp(
     onObserveTrips: (String) -> Unit,
     onObserveSchedule: (Trip) -> Unit,
     onObservePacking: (Trip) -> Unit,
+    onScheduleStartCreate: (String) -> Unit,
     onScheduleDateChange: (String) -> Unit,
     onScheduleTimeChange: (String) -> Unit,
     onSchedulePlaceNameChange: (String) -> Unit,
@@ -199,9 +203,9 @@ fun TripMateApp(
     onScheduleTravelTimeMemoChange: (String) -> Unit,
     onScheduleSave: (Trip, UserProfile) -> Unit,
     onScheduleEdit: (ScheduleItem) -> Unit,
-    onScheduleCancelEdit: (String) -> Unit,
     onScheduleDelete: (String, String) -> Unit,
     onScheduleMove: (String, ScheduleItem, Int, String) -> Unit,
+    onScheduleSaved: () -> Unit,
     onScheduleErrorShown: () -> Unit,
     onPackingTitleChange: (String) -> Unit,
     onPackingAdd: (Trip, UserProfile) -> Unit,
@@ -258,6 +262,12 @@ fun TripMateApp(
         }
     }
 
+    LaunchedEffect(scheduleUiState.isSaved) {
+        if (scheduleUiState.isSaved) {
+            appScreen = AppScreen.TripDetail
+            onScheduleSaved()
+        }
+    }
     LaunchedEffect(appScreen, selectedTrip) {
         if (appScreen == AppScreen.TripDetail && selectedTrip == null) {
             appScreen = AppScreen.Home
@@ -278,6 +288,7 @@ fun TripMateApp(
                 onJoinTripFinished()
                 appScreen = AppScreen.Home
             }
+            AppScreen.ScheduleEditor -> appScreen = AppScreen.TripDetail
             AppScreen.TripDetail -> appScreen = AppScreen.Home
             AppScreen.Home -> Unit
         }
@@ -355,17 +366,14 @@ fun TripMateApp(
                     appScreen = AppScreen.EditTrip
                 },
                 onBackClick = { appScreen = AppScreen.Home },
-                onDateChange = onScheduleDateChange,
-                onTimeChange = onScheduleTimeChange,
-                onPlaceNameChange = onSchedulePlaceNameChange,
-                onTitleChange = onScheduleTitleChange,
-                onMemoChange = onScheduleMemoChange,
-                onExpectedCostChange = onScheduleExpectedCostChange,
-                onCategoryChange = onScheduleCategoryChange,
-                onTravelTimeMemoChange = onScheduleTravelTimeMemoChange,
-                onSaveClick = { onScheduleSave(selectedTrip, user) },
-                onEditClick = onScheduleEdit,
-                onCancelEditClick = { onScheduleCancelEdit(selectedTrip.startDate) },
+                onAddScheduleClick = { date ->
+                    onScheduleStartCreate(date)
+                    appScreen = AppScreen.ScheduleEditor
+                },
+                onEditScheduleClick = { item ->
+                    onScheduleEdit(item)
+                    appScreen = AppScreen.ScheduleEditor
+                },
                 onDeleteClick = { itemId -> onScheduleDelete(selectedTrip.id, itemId) },
                 onMoveClick = { item, direction -> onScheduleMove(selectedTrip.id, item, direction, user.id) },
                 onPackingTitleChange = onPackingTitleChange,
@@ -377,6 +385,22 @@ fun TripMateApp(
                 modifier = Modifier.padding(innerPadding)
             )
 
+            appScreen == AppScreen.ScheduleEditor && selectedTrip != null -> ScheduleEditorScreen(
+                trip = selectedTrip,
+                uiState = scheduleUiState,
+                onBackClick = { appScreen = AppScreen.TripDetail },
+                onDateChange = onScheduleDateChange,
+                onTimeChange = onScheduleTimeChange,
+                onPlaceNameChange = onSchedulePlaceNameChange,
+                onTitleChange = onScheduleTitleChange,
+                onMemoChange = onScheduleMemoChange,
+                onExpectedCostChange = onScheduleExpectedCostChange,
+                onCategoryChange = onScheduleCategoryChange,
+                onTravelTimeMemoChange = onScheduleTravelTimeMemoChange,
+                onSaveClick = { onScheduleSave(selectedTrip, user) },
+                onErrorShown = onScheduleErrorShown,
+                modifier = Modifier.padding(innerPadding)
+            )
             else -> HomeScreen(
                 user = user,
                 tripListUiState = tripListUiState,
@@ -443,6 +467,7 @@ private fun LoginPreview() {
             onObserveTrips = {},
             onObserveSchedule = {},
             onObservePacking = {},
+            onScheduleStartCreate = {},
             onScheduleDateChange = {},
             onScheduleTimeChange = {},
             onSchedulePlaceNameChange = {},
@@ -453,9 +478,9 @@ private fun LoginPreview() {
             onScheduleTravelTimeMemoChange = {},
             onScheduleSave = { _, _ -> },
             onScheduleEdit = {},
-            onScheduleCancelEdit = {},
             onScheduleDelete = { _, _ -> },
             onScheduleMove = { _, _, _, _ -> },
+            onScheduleSaved = {},
             onScheduleErrorShown = {},
             onPackingTitleChange = {},
             onPackingAdd = { _, _ -> },
@@ -522,6 +547,7 @@ private fun HomePreview() {
             onObserveTrips = {},
             onObserveSchedule = {},
             onObservePacking = {},
+            onScheduleStartCreate = {},
             onScheduleDateChange = {},
             onScheduleTimeChange = {},
             onSchedulePlaceNameChange = {},
@@ -532,9 +558,9 @@ private fun HomePreview() {
             onScheduleTravelTimeMemoChange = {},
             onScheduleSave = { _, _ -> },
             onScheduleEdit = {},
-            onScheduleCancelEdit = {},
             onScheduleDelete = { _, _ -> },
             onScheduleMove = { _, _, _, _ -> },
+            onScheduleSaved = {},
             onScheduleErrorShown = {},
             onPackingTitleChange = {},
             onPackingAdd = { _, _ -> },
@@ -544,6 +570,11 @@ private fun HomePreview() {
         )
     }
 }
+
+
+
+
+
 
 
 

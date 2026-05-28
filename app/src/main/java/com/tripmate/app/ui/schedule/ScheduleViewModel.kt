@@ -49,6 +49,16 @@ class ScheduleViewModel(
         }
     }
 
+    fun startCreate(defaultDate: String) {
+        _uiState.update {
+            it.copy(
+                form = ScheduleFormState(date = defaultDate, category = scheduleCategories.first()),
+                isSaved = false,
+                errorMessage = null
+            )
+        }
+    }
+
     fun updateDate(value: String) = updateForm { copy(date = value) }
     fun updateTime(value: String) = updateForm { copy(time = value) }
     fun updatePlaceName(value: String) = updateForm { copy(placeName = value) }
@@ -72,6 +82,7 @@ class ScheduleViewModel(
                     category = item.category,
                     travelTimeMemo = item.travelTimeMemo
                 ),
+                isSaved = false,
                 errorMessage = null
             )
         }
@@ -103,7 +114,7 @@ class ScheduleViewModel(
         )
 
         viewModelScope.launch {
-            _uiState.update { it.copy(isSaving = true, errorMessage = null) }
+            _uiState.update { it.copy(isSaving = true, isSaved = false, errorMessage = null) }
             runCatching {
                 if (form.editingItemId == null) {
                     val nextSortOrder = (state.items.filter { it.date == form.date }.maxOfOrNull { it.sortOrder } ?: 0L) + 1000L
@@ -115,6 +126,7 @@ class ScheduleViewModel(
                 _uiState.update {
                     it.copy(
                         isSaving = false,
+                        isSaved = true,
                         form = ScheduleFormState(date = form.date, category = form.category)
                     )
                 }
@@ -150,6 +162,10 @@ class ScheduleViewModel(
         }
     }
 
+    fun resetSaved() {
+        _uiState.update { it.copy(isSaved = false) }
+    }
+
     fun clearError() {
         _uiState.update { it.copy(errorMessage = null) }
     }
@@ -179,3 +195,5 @@ class ScheduleViewModel(
         super.onCleared()
     }
 }
+
+

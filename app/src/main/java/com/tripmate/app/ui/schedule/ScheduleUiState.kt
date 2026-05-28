@@ -23,5 +23,7 @@ data class ScheduleUiState(
     val isSaving: Boolean = false,
     val items: List<ScheduleItem> = emptyList(),
     val form: ScheduleFormState = ScheduleFormState(),
+    val isSaved: Boolean = false,
     val errorMessage: String? = null
 )
+
