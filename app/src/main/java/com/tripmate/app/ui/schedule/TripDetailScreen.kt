@@ -6,6 +6,7 @@ import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,8 +24,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.DragIndicator
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
@@ -52,6 +52,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -486,8 +487,7 @@ private fun ScheduleTabContent(
                         onMapClick = { openMap(context, trip.mapProvider, item.placeName) },
                         onEditClick = { onEditClick(item) },
                         onDeleteClick = { onDeleteClick(item.id) },
-                        onMoveUpClick = { onMoveClick(item, -1) },
-                        onMoveDownClick = { onMoveClick(item, 1) }
+                        onDragMove = { direction -> onMoveClick(item, direction) }
                     )
                 }
                 Spacer(modifier = Modifier.height(72.dp))
@@ -573,8 +573,7 @@ private fun ScheduleItemCard(
     onMapClick: () -> Unit,
     onEditClick: () -> Unit,
     onDeleteClick: () -> Unit,
-    onMoveUpClick: () -> Unit,
-    onMoveDownClick: () -> Unit
+    onDragMove: (Int) -> Unit
 ) {
     OutlinedCard(
         modifier = Modifier
@@ -652,19 +651,57 @@ private fun ScheduleItemCard(
                 }
             }
             if (isManageMode) {
-                Column {
-                    IconButton(enabled = canMoveUp, onClick = onMoveUpClick) {
-                        Icon(imageVector = Icons.Filled.KeyboardArrowUp, contentDescription = "위로 이동")
-                    }
-                    IconButton(enabled = canMoveDown, onClick = onMoveDownClick) {
-                        Icon(imageVector = Icons.Filled.KeyboardArrowDown, contentDescription = "아래로 이동")
-                    }
-                }
+                DragReorderHandle(
+                    canMoveUp = canMoveUp,
+                    canMoveDown = canMoveDown,
+                    onDragMove = onDragMove
+                )
             }
         }
     }
 }
 
+@Composable
+private fun DragReorderHandle(
+    canMoveUp: Boolean,
+    canMoveDown: Boolean,
+    onDragMove: (Int) -> Unit
+) {
+    var dragOffset by remember { mutableStateOf(0f) }
+    val threshold = 72f
+
+    Box(
+        modifier = Modifier
+            .height(96.dp)
+            .pointerInput(canMoveUp, canMoveDown) {
+                detectVerticalDragGestures(
+                    onDragEnd = { dragOffset = 0f },
+                    onDragCancel = { dragOffset = 0f }
+                ) { change, dragAmount ->
+                    change.consume()
+                    dragOffset += dragAmount
+                    when {
+                        dragOffset <= -threshold && canMoveUp -> {
+                            onDragMove(-1)
+                            dragOffset = 0f
+                        }
+                        dragOffset >= threshold && canMoveDown -> {
+                            onDragMove(1)
+                            dragOffset = 0f
+                        }
+                    }
+                }
+            }
+            .padding(horizontal = 4.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = Icons.Filled.DragIndicator,
+            contentDescription = "드래그해서 순서 변경",
+            tint = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
 @Composable
 private fun PackingTabContent(
     uiState: PackingUiState,
@@ -815,4 +852,5 @@ private fun mapFallbackUri(provider: String, encodedPlace: String): Uri {
         Uri.parse("https://map.naver.com/p/search/$encodedPlace")
     }
 }
+
 
