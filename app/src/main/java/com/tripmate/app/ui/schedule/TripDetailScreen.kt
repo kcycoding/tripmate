@@ -4,13 +4,18 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -24,7 +29,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.DragIndicator
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
@@ -51,17 +57,23 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
+import com.tripmate.app.data.ExpenseItem
 import com.tripmate.app.data.PackingItem
 import com.tripmate.app.data.ScheduleItem
 import com.tripmate.app.data.Trip
 import com.tripmate.app.data.scheduleCategories
+import com.tripmate.app.ui.budget.BudgetUiState
 import com.tripmate.app.ui.common.BackIconButton
 import com.tripmate.app.ui.packing.PackingUiState
 import java.net.URLEncoder
@@ -76,6 +88,7 @@ fun TripDetailScreen(
     trip: Trip,
     uiState: ScheduleUiState,
     packingUiState: PackingUiState,
+    budgetUiState: BudgetUiState,
     canEditTrip: Boolean,
     onEditTripClick: () -> Unit,
     onBackClick: () -> Unit,
@@ -83,11 +96,23 @@ fun TripDetailScreen(
     onEditScheduleClick: (ScheduleItem) -> Unit,
     onDeleteClick: (String) -> Unit,
     onMoveClick: (ScheduleItem, Int) -> Unit,
+    onMoveToIndex: (ScheduleItem, Int) -> Unit,
     onPackingTitleChange: (String) -> Unit,
     onPackingAddClick: () -> Unit,
     onPackingCheckedChange: (PackingItem, Boolean) -> Unit,
     onPackingDeleteClick: (String) -> Unit,
     onPackingErrorShown: () -> Unit,
+    onBudgetStartCreate: (String) -> Unit,
+    onBudgetStartEdit: (ExpenseItem) -> Unit,
+    onBudgetSelectScheduleItem: (ScheduleItem?) -> Unit,
+    onBudgetDateChange: (String) -> Unit,
+    onBudgetTitleChange: (String) -> Unit,
+    onBudgetCategoryChange: (String) -> Unit,
+    onBudgetAmountChange: (String) -> Unit,
+    onBudgetMemoChange: (String) -> Unit,
+    onBudgetSaveClick: () -> Unit,
+    onBudgetDeleteClick: (String) -> Unit,
+    onBudgetErrorShown: () -> Unit,
     onErrorShown: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -119,6 +144,19 @@ fun TripDetailScreen(
             snackbarHostState.showSnackbar(message)
             onPackingErrorShown()
         }
+    }
+
+    LaunchedEffect(budgetUiState.errorMessage) {
+        val message = budgetUiState.errorMessage
+        if (message != null) {
+            snackbarHostState.showSnackbar(message)
+            onBudgetErrorShown()
+        }
+    }
+
+    BackHandler(enabled = isManageMode) {
+        isManageMode = false
+        selectedItemIds = emptySet()
     }
 
     Scaffold(
@@ -157,45 +195,70 @@ fun TripDetailScreen(
                     onClick = { selectedTab = 1 },
                     text = { Text("준비물") }
                 )
+                Tab(
+                    selected = selectedTab == 2,
+                    onClick = { selectedTab = 2 },
+                    text = { Text("예산 합계") }
+                )
             }
 
-            if (selectedTab == 0) {
-                ScheduleTabContent(
-                    trip = trip,
-                    uiState = uiState,
-                    days = days,
-                    selectedDate = selectedDate,
-                    isManageMode = isManageMode,
-                    selectedItemIds = selectedItemIds,
-                    onDateSelected = {
-                        selectedDate = it
-                        selectedItemIds = emptySet()
-                    },
-                    onManageModeChange = {
-                        isManageMode = it
-                        if (!it) selectedItemIds = emptySet()
-                    },
-                    onItemSelectedChange = { itemId, checked ->
-                        selectedItemIds = if (checked) selectedItemIds + itemId else selectedItemIds - itemId
-                    },
-                    onDeleteSelectedClick = {
-                        selectedItemIds.forEach(onDeleteClick)
-                        selectedItemIds = emptySet()
-                        isManageMode = false
-                    },
-                    context = context,
-                    onEditClick = onEditScheduleClick,
-                    onDeleteClick = onDeleteClick,
-                    onMoveClick = onMoveClick
-                )
-            } else {
-                PackingTabContent(
-                    uiState = packingUiState,
-                    onTitleChange = onPackingTitleChange,
-                    onAddClick = onPackingAddClick,
-                    onCheckedChange = onPackingCheckedChange,
-                    onDeleteClick = onPackingDeleteClick
-                )
+            Box(modifier = Modifier.weight(1f)) {
+                when (selectedTab) {
+                    0 -> {
+                    ScheduleTabContent(
+                        trip = trip,
+                        uiState = uiState,
+                        days = days,
+                        selectedDate = selectedDate,
+                        isManageMode = isManageMode,
+                        selectedItemIds = selectedItemIds,
+                        onDateSelected = {
+                            selectedDate = it
+                            selectedItemIds = emptySet()
+                        },
+                        onManageModeChange = {
+                            isManageMode = it
+                            if (!it) selectedItemIds = emptySet()
+                        },
+                        onItemSelectedChange = { itemId, checked ->
+                            selectedItemIds = if (checked) selectedItemIds + itemId else selectedItemIds - itemId
+                        },
+                        onDeleteSelectedClick = {
+                            selectedItemIds.forEach(onDeleteClick)
+                            selectedItemIds = emptySet()
+                            isManageMode = false
+                        },
+                        context = context,
+                        onEditClick = onEditScheduleClick,
+                        onDeleteClick = onDeleteClick,
+                        onMoveClick = onMoveClick,
+                        onMoveToIndex = onMoveToIndex
+                    )
+                    }
+                    1 -> PackingTabContent(
+                        uiState = packingUiState,
+                        onTitleChange = onPackingTitleChange,
+                        onAddClick = onPackingAddClick,
+                        onCheckedChange = onPackingCheckedChange,
+                        onDeleteClick = onPackingDeleteClick
+                    )
+                    else -> BudgetTabContent(
+                        trip = trip,
+                        scheduleItems = uiState.items,
+                        budgetUiState = budgetUiState,
+                        days = days,
+                        onStartCreate = onBudgetStartCreate,
+                        onStartEdit = onBudgetStartEdit,
+                        onSelectScheduleItem = onBudgetSelectScheduleItem,
+                        onDateChange = onBudgetDateChange,
+                        onTitleChange = onBudgetTitleChange,
+                        onCategoryChange = onBudgetCategoryChange,
+                        onAmountChange = onBudgetAmountChange,
+                        onMemoChange = onBudgetMemoChange,
+                        onSaveClick = onBudgetSaveClick,
+                        onDeleteClick = onBudgetDeleteClick
+                    )
+                }
             }
         }
     }
@@ -398,83 +461,105 @@ private fun ScheduleTabContent(
     context: Context,
     onEditClick: (ScheduleItem) -> Unit,
     onDeleteClick: (String) -> Unit,
-    onMoveClick: (ScheduleItem, Int) -> Unit
+    onMoveClick: (ScheduleItem, Int) -> Unit,
+    onMoveToIndex: (ScheduleItem, Int) -> Unit
 ) {
     val selectedItems = uiState.items
         .filter { it.date == selectedDate }
         .sortedWith(compareBy<ScheduleItem> { it.sortOrder }.thenBy { it.time })
+    var draggingItemId by remember { mutableStateOf<String?>(null) }
+    var dragTargetIndex by remember { mutableStateOf<Int?>(null) }
+    var dragProgressPx by remember { mutableStateOf(0f) }
+    val reorderStepPx = with(LocalDensity.current) { 132.dp.toPx() }
+    val originalDragIndex = selectedItems.indexOfFirst { it.id == draggingItemId }
+    val dropMarkerIndex = dragTargetIndex
+        ?.takeIf { originalDragIndex >= 0 && it != originalDragIndex }
+        ?.let { targetIndex -> if (targetIndex > originalDragIndex) targetIndex + 1 else targetIndex }
+        ?.coerceIn(0, selectedItems.size)
 
-    DateSelector(
-        days = days,
-        selectedDate = selectedDate,
-        items = uiState.items,
-        currency = trip.baseCurrency,
-        onDateSelected = onDateSelected
-    )
-
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = "전체 일정",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                text = selectedDate.ifBlank { "날짜 없음" },
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        if (isManageMode) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = { onManageModeChange(false) }) { Text("완료") }
-                Button(
-                    enabled = selectedItemIds.isNotEmpty(),
-                    onClick = onDeleteSelectedClick
-                ) {
-                    Icon(imageVector = Icons.Filled.Delete, contentDescription = null)
-                    Text("삭제")
-                }
-            }
-        } else {
-            OutlinedButton(
-                enabled = selectedItems.isNotEmpty(),
-                onClick = { onManageModeChange(true) }
-            ) { Text("편집") }
-        }
+    fun clearDrag() {
+        draggingItemId = null
+        dragTargetIndex = null
+        dragProgressPx = 0f
     }
 
-    if (uiState.isLoading) {
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(top = 24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        DateSelector(
+            days = days,
+            selectedDate = selectedDate,
+            items = uiState.items,
+            currency = trip.baseCurrency,
+            onDateSelected = onDateSelected
+        )
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            CircularProgressIndicator()
-            Spacer(modifier = Modifier.height(10.dp))
-            Text(text = "일정을 불러오는 중입니다.")
-        }
-    } else {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            if (selectedItems.isEmpty()) {
-                OutlinedCard(modifier = Modifier.fillMaxWidth()) {
-                    Text(
-                        modifier = Modifier.padding(16.dp),
-                        text = "등록된 일정이 없습니다.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "전체 일정",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = selectedDate.ifBlank { "날짜 없음" },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            if (isManageMode) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    OutlinedButton(onClick = { onManageModeChange(false) }) { Text("취소") }
+                    OutlinedButton(onClick = { onManageModeChange(false) }) { Text("완료") }
+                    Button(
+                        enabled = selectedItemIds.isNotEmpty(),
+                        onClick = onDeleteSelectedClick
+                    ) {
+                        Icon(imageVector = Icons.Filled.Delete, contentDescription = null)
+                        Text("삭제")
+                    }
                 }
             } else {
-                selectedItems.forEachIndexed { index, item ->
+                OutlinedButton(
+                    enabled = selectedItems.isNotEmpty(),
+                    onClick = { onManageModeChange(true) }
+                ) { Text("편집") }
+            }
+        }
+
+        if (uiState.isLoading) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(top = 24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                CircularProgressIndicator()
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(text = "일정을 불러오는 중입니다.")
+            }
+        } else if (selectedItems.isEmpty()) {
+            OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    modifier = Modifier.padding(16.dp),
+                    text = "등록된 일정이 없습니다.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                itemsIndexed(selectedItems, key = { _, item -> item.id }) { index, item ->
+                    val isDragging = item.id == draggingItemId
+                    if (isManageMode && dropMarkerIndex == index) {
+                        ReorderPreviewMarker()
+                    }
                     ScheduleItemCard(
                         item = item,
                         currency = trip.baseCurrency,
@@ -482,20 +567,62 @@ private fun ScheduleTabContent(
                         isSelected = item.id in selectedItemIds,
                         canMoveUp = index > 0,
                         canMoveDown = index < selectedItems.lastIndex,
+                        isDraggingPreview = isDragging,
                         onLongClick = { onManageModeChange(true) },
                         onSelectedChange = { checked -> onItemSelectedChange(item.id, checked) },
                         onMapClick = { openMap(context, trip.mapProvider, item.placeName) },
                         onEditClick = { onEditClick(item) },
                         onDeleteClick = { onDeleteClick(item.id) },
-                        onDragMove = { direction -> onMoveClick(item, direction) }
+                        onMoveUpClick = { onMoveClick(item, -1) },
+                        onMoveDownClick = { onMoveClick(item, 1) },
+                        onDragStart = {
+                            draggingItemId = item.id
+                            dragTargetIndex = index
+                            dragProgressPx = 0f
+                        },
+                        onDragMove = { dragAmountY ->
+                            if (draggingItemId == null) return@ScheduleItemCard
+                            var nextIndex = dragTargetIndex ?: index
+                            dragProgressPx += dragAmountY
+                            while (dragProgressPx >= reorderStepPx && nextIndex < selectedItems.lastIndex) {
+                                nextIndex += 1
+                                dragProgressPx -= reorderStepPx
+                            }
+                            while (dragProgressPx <= -reorderStepPx && nextIndex > 0) {
+                                nextIndex -= 1
+                                dragProgressPx += reorderStepPx
+                            }
+                            dragTargetIndex = nextIndex
+                        },
+                        onDragEnd = {
+                            val movingItem = selectedItems.firstOrNull { it.id == draggingItemId }
+                            val targetIndex = dragTargetIndex
+                            clearDrag()
+                            if (movingItem != null && targetIndex != null && targetIndex != index) {
+                                onMoveToIndex(movingItem, targetIndex)
+                            }
+                        },
+                        onDragCancel = { clearDrag() }
                     )
                 }
-                Spacer(modifier = Modifier.height(72.dp))
+                if (isManageMode && dropMarkerIndex == selectedItems.size) {
+                    item { ReorderPreviewMarker() }
+                }
+                item { Spacer(modifier = Modifier.height(72.dp)) }
             }
         }
     }
 }
 
+@Composable
+private fun ReorderPreviewMarker() {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(3.dp)
+            .background(MaterialTheme.colorScheme.primary)
+    )
+}
 @Composable
 private fun DateSelector(
     days: List<String>,
@@ -568,16 +695,41 @@ private fun ScheduleItemCard(
     isSelected: Boolean,
     canMoveUp: Boolean,
     canMoveDown: Boolean,
+    isDraggingPreview: Boolean,
     onLongClick: () -> Unit,
     onSelectedChange: (Boolean) -> Unit,
     onMapClick: () -> Unit,
     onEditClick: () -> Unit,
     onDeleteClick: () -> Unit,
-    onDragMove: (Int) -> Unit
+    onMoveUpClick: () -> Unit,
+    onMoveDownClick: () -> Unit,
+    onDragStart: () -> Unit,
+    onDragMove: (Float) -> Unit,
+    onDragEnd: () -> Unit,
+    onDragCancel: () -> Unit
 ) {
+    val dragModifier = if (isManageMode) {
+        Modifier.pointerInput(item.id) {
+            detectDragGestures(
+                onDragStart = { onDragStart() },
+                onDragEnd = { onDragEnd() },
+                onDragCancel = { onDragCancel() }
+            ) { change, dragAmount ->
+                change.consume()
+                onDragMove(dragAmount.y)
+            }
+        }
+    } else {
+        Modifier
+    }
+
     OutlinedCard(
         modifier = Modifier
             .fillMaxWidth()
+            .then(dragModifier)
+            .zIndex(if (isDraggingPreview) 1f else 0f)
+            .scale(if (isDraggingPreview) 0.98f else 1f)
+            .alpha(if (isDraggingPreview) 0.84f else 1f)
             .combinedClickable(
                 onClick = {},
                 onLongClick = onLongClick
@@ -623,7 +775,7 @@ private fun ScheduleItemCard(
                     )
                 }
                 Text(
-                    text = "비용 ${item.costText} $currency · 이동 ${item.travelTimeMemo.ifBlank { "-" }}",
+                    text = "예상 ${item.costText} $currency · 이동 ${item.travelTimeMemo.ifBlank { "-" }}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -651,10 +803,353 @@ private fun ScheduleItemCard(
                 }
             }
             if (isManageMode) {
-                DragReorderHandle(
-                    canMoveUp = canMoveUp,
-                    canMoveDown = canMoveDown,
-                    onDragMove = onDragMove
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    IconButton(enabled = canMoveUp, onClick = onMoveUpClick) {
+                        Icon(imageVector = Icons.Filled.KeyboardArrowUp, contentDescription = "위로 이동")
+                    }
+                    IconButton(enabled = canMoveDown, onClick = onMoveDownClick) {
+                        Icon(imageVector = Icons.Filled.KeyboardArrowDown, contentDescription = "아래로 이동")
+                    }
+                }
+            }
+        }
+    }
+}
+@Composable
+private fun BudgetTabContent(
+    trip: Trip,
+    scheduleItems: List<ScheduleItem>,
+    budgetUiState: BudgetUiState,
+    days: List<String>,
+    onStartCreate: (String) -> Unit,
+    onStartEdit: (ExpenseItem) -> Unit,
+    onSelectScheduleItem: (ScheduleItem?) -> Unit,
+    onDateChange: (String) -> Unit,
+    onTitleChange: (String) -> Unit,
+    onCategoryChange: (String) -> Unit,
+    onAmountChange: (String) -> Unit,
+    onMemoChange: (String) -> Unit,
+    onSaveClick: () -> Unit,
+    onDeleteClick: (String) -> Unit
+) {
+    var showForm by rememberSaveable(trip.id) { mutableStateOf(false) }
+    val form = budgetUiState.form
+    val expenses = budgetUiState.items.sortedWith(compareBy<ExpenseItem> { it.date }.thenBy { it.createdAt?.seconds ?: 0L })
+    val total = expenses.sumOf { it.amount }
+    val dateTotals = days.map { date -> date to expenses.filter { it.date == date }.sumOf { it.amount } }
+    val categoryTotals = scheduleCategories.map { category ->
+        category to expenses.filter { it.category == category }.sumOf { it.amount }
+    }.filter { it.second > 0.0 }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "실제 예산",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "일정의 예상 비용과 별도로 실제 사용 금액을 관리합니다.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Button(onClick = {
+                onStartCreate(days.firstOrNull().orEmpty().ifBlank { trip.startDate })
+                showForm = true
+            }) {
+                Icon(imageVector = Icons.Filled.Add, contentDescription = null)
+                Text("추가")
+            }
+        }
+
+        if (showForm || form.isEditing) {
+            BudgetFormCard(
+                trip = trip,
+                form = form,
+                scheduleItems = scheduleItems,
+                isSaving = budgetUiState.isSaving,
+                onSelectScheduleItem = onSelectScheduleItem,
+                onDateChange = onDateChange,
+                onTitleChange = onTitleChange,
+                onCategoryChange = onCategoryChange,
+                onAmountChange = onAmountChange,
+                onMemoChange = onMemoChange,
+                onSaveClick = {
+                    onSaveClick()
+                    showForm = false
+                },
+                onCancelClick = { showForm = false }
+            )
+        }
+
+        BudgetSummaryCard(
+            title = "전체 합계",
+            amount = total,
+            currency = trip.baseCurrency,
+            exchangeRateToKrw = trip.exchangeRateToKrw
+        )
+
+        BudgetSection(title = "날짜별 합계") {
+            dateTotals.forEachIndexed { index, (date, amount) ->
+                BudgetRow(
+                    title = "Day ${index + 1} · ${shortDateLabel(date)}",
+                    subtitle = date,
+                    amount = amount,
+                    currency = trip.baseCurrency,
+                    exchangeRateToKrw = trip.exchangeRateToKrw
+                )
+            }
+        }
+
+        BudgetSection(title = "카테고리별 합계") {
+            if (categoryTotals.isEmpty()) {
+                EmptyBudgetText("등록된 실제 예산이 없습니다.")
+            } else {
+                categoryTotals.forEach { (category, amount) ->
+                    BudgetRow(
+                        title = category,
+                        subtitle = "${expenses.count { it.category == category }}개 항목",
+                        amount = amount,
+                        currency = trip.baseCurrency,
+                        exchangeRateToKrw = trip.exchangeRateToKrw
+                    )
+                }
+            }
+        }
+
+        BudgetSection(title = "일정별 실제 비용") {
+            if (budgetUiState.isLoading) {
+                EmptyBudgetText("예산을 불러오는 중입니다.")
+            } else if (expenses.isEmpty()) {
+                EmptyBudgetText("등록된 실제 예산이 없습니다.")
+            } else {
+                expenses.forEach { expense ->
+                    BudgetExpenseRow(
+                        expense = expense,
+                        currency = trip.baseCurrency,
+                        exchangeRateToKrw = trip.exchangeRateToKrw,
+                        onEditClick = {
+                            onStartEdit(expense)
+                            showForm = true
+                        },
+                        onDeleteClick = { onDeleteClick(expense.id) }
+                    )
+                }
+            }
+        }
+        Spacer(modifier = Modifier.height(72.dp))
+    }
+}
+
+@Composable
+private fun BudgetFormCard(
+    trip: Trip,
+    form: com.tripmate.app.ui.budget.BudgetFormState,
+    scheduleItems: List<ScheduleItem>,
+    isSaving: Boolean,
+    onSelectScheduleItem: (ScheduleItem?) -> Unit,
+    onDateChange: (String) -> Unit,
+    onTitleChange: (String) -> Unit,
+    onCategoryChange: (String) -> Unit,
+    onAmountChange: (String) -> Unit,
+    onMemoChange: (String) -> Unit,
+    onSaveClick: () -> Unit,
+    onCancelClick: () -> Unit
+) {
+    OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text(
+                text = if (form.isEditing) "예산 수정" else "예산 추가",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = "기존 일정 선택",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Row(
+                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FilterChip(
+                    selected = form.scheduleItemId == null,
+                    onClick = { onSelectScheduleItem(null) },
+                    label = { Text("직접 입력") }
+                )
+                scheduleItems.sortedWith(compareBy<ScheduleItem> { it.date }.thenBy { it.sortOrder }).forEach { item ->
+                    FilterChip(
+                        selected = form.scheduleItemId == item.id,
+                        onClick = { onSelectScheduleItem(item) },
+                        label = { Text(item.title.ifBlank { item.placeName }.ifBlank { "일정" }) }
+                    )
+                }
+            }
+            OutlinedTextField(
+                modifier = Modifier.fillMaxWidth(),
+                value = form.date,
+                onValueChange = onDateChange,
+                label = { Text("날짜") },
+                placeholder = { Text(trip.startDate) },
+                singleLine = true,
+                enabled = !isSaving
+            )
+            OutlinedTextField(
+                modifier = Modifier.fillMaxWidth(),
+                value = form.title,
+                onValueChange = onTitleChange,
+                label = { Text("예산 항목") },
+                placeholder = { Text("예: 택시비, 간식, 현장 결제") },
+                singleLine = true,
+                enabled = !isSaving
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedTextField(
+                    modifier = Modifier.weight(1f),
+                    value = form.amount,
+                    onValueChange = onAmountChange,
+                    label = { Text("실제 금액") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    singleLine = true,
+                    enabled = !isSaving
+                )
+                OutlinedTextField(
+                    modifier = Modifier.weight(1f),
+                    value = trip.baseCurrency,
+                    onValueChange = {},
+                    label = { Text("통화") },
+                    singleLine = true,
+                    enabled = false
+                )
+            }
+            CategorySelector(
+                selectedCategory = form.category,
+                enabled = !isSaving,
+                onCategoryChange = onCategoryChange
+            )
+            OutlinedTextField(
+                modifier = Modifier.fillMaxWidth(),
+                value = form.memo,
+                onValueChange = onMemoChange,
+                label = { Text("메모") },
+                minLines = 2,
+                enabled = !isSaving
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedButton(
+                    modifier = Modifier.weight(1f),
+                    enabled = !isSaving,
+                    onClick = onCancelClick
+                ) { Text("취소") }
+                Button(
+                    modifier = Modifier.weight(1f),
+                    enabled = !isSaving,
+                    onClick = onSaveClick
+                ) { Text(if (isSaving) "저장 중..." else "저장") }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BudgetExpenseRow(
+    expense: ExpenseItem,
+    currency: String,
+    exchangeRateToKrw: Double?,
+    onEditClick: () -> Unit,
+    onDeleteClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Text(
+                text = expense.title.ifBlank { "제목 없는 예산" },
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = "${shortDateLabel(expense.date)} · ${expense.category}${if (expense.memo.isNotBlank()) " · ${expense.memo}" else ""}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        Column(horizontalAlignment = Alignment.End) {
+            Text(
+                text = formatMoney(expense.amount, currency),
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Bold
+            )
+            if (currency != "KRW" && exchangeRateToKrw != null) {
+                Text(
+                    text = formatMoney(expense.amount * exchangeRateToKrw, "KRW"),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        IconButton(onClick = onEditClick) {
+            Icon(imageVector = Icons.Filled.Edit, contentDescription = "예산 수정")
+        }
+        IconButton(onClick = onDeleteClick) {
+            Icon(imageVector = Icons.Filled.Delete, contentDescription = "예산 삭제")
+        }
+    }
+}
+@Composable
+private fun BudgetSummaryCard(
+    title: String,
+    amount: Double,
+    currency: String,
+    exchangeRateToKrw: Double?
+) {
+    OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = formatMoney(amount, currency),
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+            if (currency != "KRW" && exchangeRateToKrw != null) {
+                Text(
+                    text = "원화 ${formatMoney(amount * exchangeRateToKrw, "KRW")}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
@@ -662,45 +1157,85 @@ private fun ScheduleItemCard(
 }
 
 @Composable
-private fun DragReorderHandle(
-    canMoveUp: Boolean,
-    canMoveDown: Boolean,
-    onDragMove: (Int) -> Unit
+private fun BudgetSection(
+    title: String,
+    content: @Composable ColumnScope.() -> Unit
 ) {
-    var dragOffset by remember { mutableStateOf(0f) }
-    val threshold = 72f
-
-    Box(
-        modifier = Modifier
-            .height(96.dp)
-            .pointerInput(canMoveUp, canMoveDown) {
-                detectVerticalDragGestures(
-                    onDragEnd = { dragOffset = 0f },
-                    onDragCancel = { dragOffset = 0f }
-                ) { change, dragAmount ->
-                    change.consume()
-                    dragOffset += dragAmount
-                    when {
-                        dragOffset <= -threshold && canMoveUp -> {
-                            onDragMove(-1)
-                            dragOffset = 0f
-                        }
-                        dragOffset >= threshold && canMoveDown -> {
-                            onDragMove(1)
-                            dragOffset = 0f
-                        }
-                    }
-                }
-            }
-            .padding(horizontal = 4.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Icon(
-            imageVector = Icons.Filled.DragIndicator,
-            contentDescription = "드래그해서 순서 변경",
-            tint = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+    OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+            content()
+        }
     }
+}
+
+@Composable
+private fun BudgetRow(
+    title: String,
+    subtitle: String,
+    amount: Double,
+    currency: String,
+    exchangeRateToKrw: Double?
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Text(
+                text = title.ifBlank { "제목 없는 일정" },
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        Column(horizontalAlignment = Alignment.End) {
+            Text(
+                text = formatMoney(amount, currency),
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Bold
+            )
+            if (currency != "KRW" && exchangeRateToKrw != null) {
+                Text(
+                    text = formatMoney(amount * exchangeRateToKrw, "KRW"),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun EmptyBudgetText(message: String) {
+    Text(
+        text = message,
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+}
+
+private fun formatMoney(amount: Double, currency: String): String {
+    return "${"%,.0f".format(amount)} $currency"
 }
 @Composable
 private fun PackingTabContent(
@@ -852,5 +1387,27 @@ private fun mapFallbackUri(provider: String, encodedPlace: String): Uri {
         Uri.parse("https://map.naver.com/p/search/$encodedPlace")
     }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 

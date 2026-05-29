@@ -161,6 +161,35 @@ class ScheduleViewModel(
                 }
         }
     }
+    fun moveToIndex(tripId: String, item: ScheduleItem, targetIndex: Int, userId: String) {
+        val sameDayItems = _uiState.value.items.filter { it.date == item.date }.sortedWith(compareBy<ScheduleItem> { it.sortOrder }.thenBy { it.time })
+        val currentIndex = sameDayItems.indexOfFirst { it.id == item.id }
+        if (currentIndex < 0) return
+
+        val safeTargetIndex = targetIndex.coerceIn(0, sameDayItems.lastIndex)
+        if (safeTargetIndex == currentIndex) return
+
+        val reorderedItems = sameDayItems.toMutableList().apply {
+            val movingItem = removeAt(currentIndex)
+            add(safeTargetIndex, movingItem)
+        }.mapIndexed { index, scheduleItem ->
+            scheduleItem.copy(sortOrder = (index + 1) * 1000L, updatedBy = userId)
+        }
+
+        _uiState.update { state ->
+            state.copy(
+                items = (state.items.filterNot { it.date == item.date } + reorderedItems)
+                    .sortedWith(compareBy<ScheduleItem> { it.date }.thenBy { it.sortOrder }.thenBy { it.time })
+            )
+        }
+
+        viewModelScope.launch {
+            runCatching { repository.updateScheduleOrder(tripId, reorderedItems, userId) }
+                .onFailure { throwable ->
+                    _uiState.update { it.copy(errorMessage = throwable.message ?: "일정 순서를 변경하지 못했습니다.") }
+                }
+        }
+    }
 
     fun resetSaved() {
         _uiState.update { it.copy(isSaved = false) }
@@ -195,5 +224,6 @@ class ScheduleViewModel(
         super.onCleared()
     }
 }
+
 
 

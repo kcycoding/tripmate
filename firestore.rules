@@ -64,6 +64,10 @@ service cloud.firestore {
       match /packingItems/{packingItemId} {
         allow read, write: if isTripMember(tripId);
       }
+
+      match /expenseItems/{expenseItemId} {
+        allow read, write: if isTripMember(tripId);
+      }
     }
 
     match /{document=**} {
@@ -71,4 +75,6 @@ service cloud.firestore {
     }
   }
 }
+
+
 

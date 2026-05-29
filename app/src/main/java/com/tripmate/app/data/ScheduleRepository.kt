@@ -112,6 +112,18 @@ class ScheduleRepository(
             .commit()
             .await()
     }
+    suspend fun updateScheduleOrder(tripId: String, items: List<ScheduleItem>, userId: String) {
+        val tripRef = firestore.collection("trips").document(tripId)
+        val now = Timestamp.now()
+        val batch = firestore.batch()
+        items.forEachIndexed { index, item ->
+            batch.update(
+                tripRef.collection("scheduleItems").document(item.id),
+                mapOf("sortOrder" to ((index + 1) * 1000L), "updatedBy" to userId, "updatedAt" to now)
+            )
+        }
+        batch.commit().await()
+    }
 }
 
 private suspend fun <T> Task<T>.await(): T = suspendCancellableCoroutine { continuation ->
@@ -119,3 +131,4 @@ private suspend fun <T> Task<T>.await(): T = suspendCancellableCoroutine { conti
     addOnFailureListener { exception -> continuation.resumeWithException(exception) }
     addOnCanceledListener { continuation.cancel() }
 }
+

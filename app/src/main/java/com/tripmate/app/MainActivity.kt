@@ -25,6 +25,8 @@ import com.tripmate.app.data.ScheduleItem
 import com.tripmate.app.data.Trip
 import com.tripmate.app.data.UserProfile
 import com.tripmate.app.ui.auth.LoginScreen
+import com.tripmate.app.ui.budget.BudgetUiState
+import com.tripmate.app.ui.budget.BudgetViewModel
 import com.tripmate.app.ui.home.HomeScreen
 import com.tripmate.app.ui.home.TripListUiState
 import com.tripmate.app.ui.home.TripListViewModel
@@ -62,6 +64,7 @@ class MainActivity : ComponentActivity() {
     private val joinTripViewModel: JoinTripViewModel by viewModels()
     private val scheduleViewModel: ScheduleViewModel by viewModels()
     private val packingViewModel: PackingViewModel by viewModels()
+    private val budgetViewModel: BudgetViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -75,6 +78,7 @@ class MainActivity : ComponentActivity() {
                 val joinTripUiState by joinTripViewModel.uiState.collectAsState()
                 val scheduleUiState by scheduleViewModel.uiState.collectAsState()
                 val packingUiState by packingViewModel.uiState.collectAsState()
+                val budgetUiState by budgetViewModel.uiState.collectAsState()
                 TripMateApp(
                     authUiState = authUiState,
                     tripListUiState = tripListUiState,
@@ -83,6 +87,7 @@ class MainActivity : ComponentActivity() {
                     joinTripUiState = joinTripUiState,
                     scheduleUiState = scheduleUiState,
                     packingUiState = packingUiState,
+                    budgetUiState = budgetUiState,
                     onGoogleSignInClick = { authViewModel.signIn(this) },
                     onCreateTrip = createTripViewModel::createTrip,
                     onTitleChange = createTripViewModel::updateTitle,
@@ -120,6 +125,7 @@ class MainActivity : ComponentActivity() {
                     onObserveTrips = tripListViewModel::observeTrips,
                     onObserveSchedule = scheduleViewModel::observeTrip,
                     onObservePacking = packingViewModel::observeTrip,
+                    onObserveBudget = budgetViewModel::observeTrip,
                     onScheduleStartCreate = scheduleViewModel::startCreate,
                     onScheduleDateChange = scheduleViewModel::updateDate,
                     onScheduleTimeChange = scheduleViewModel::updateTime,
@@ -133,13 +139,25 @@ class MainActivity : ComponentActivity() {
                     onScheduleEdit = scheduleViewModel::startEdit,
                     onScheduleDelete = scheduleViewModel::delete,
                     onScheduleMove = scheduleViewModel::move,
+                    onScheduleMoveToIndex = scheduleViewModel::moveToIndex,
                     onScheduleSaved = scheduleViewModel::resetSaved,
                     onScheduleErrorShown = scheduleViewModel::clearError,
                     onPackingTitleChange = packingViewModel::updateNewItemTitle,
                     onPackingAdd = packingViewModel::add,
                     onPackingCheckedChange = packingViewModel::setChecked,
                     onPackingDelete = packingViewModel::delete,
-                    onPackingErrorShown = packingViewModel::clearError
+                    onPackingErrorShown = packingViewModel::clearError,
+                    onBudgetStartCreate = budgetViewModel::startCreate,
+                    onBudgetStartEdit = budgetViewModel::startEdit,
+                    onBudgetSelectScheduleItem = budgetViewModel::selectScheduleItem,
+                    onBudgetDateChange = budgetViewModel::updateDate,
+                    onBudgetTitleChange = budgetViewModel::updateTitle,
+                    onBudgetCategoryChange = budgetViewModel::updateCategory,
+                    onBudgetAmountChange = budgetViewModel::updateAmount,
+                    onBudgetMemoChange = budgetViewModel::updateMemo,
+                    onBudgetSave = budgetViewModel::save,
+                    onBudgetDelete = budgetViewModel::delete,
+                    onBudgetErrorShown = budgetViewModel::clearError
                 )
             }
         }
@@ -155,6 +173,7 @@ fun TripMateApp(
     joinTripUiState: JoinTripUiState,
     scheduleUiState: ScheduleUiState,
     packingUiState: PackingUiState,
+    budgetUiState: BudgetUiState,
     onGoogleSignInClick: () -> Unit,
     onCreateTrip: (UserProfile) -> Unit,
     onTitleChange: (String) -> Unit,
@@ -192,6 +211,7 @@ fun TripMateApp(
     onObserveTrips: (String) -> Unit,
     onObserveSchedule: (Trip) -> Unit,
     onObservePacking: (Trip) -> Unit,
+    onObserveBudget: (Trip) -> Unit,
     onScheduleStartCreate: (String) -> Unit,
     onScheduleDateChange: (String) -> Unit,
     onScheduleTimeChange: (String) -> Unit,
@@ -205,13 +225,25 @@ fun TripMateApp(
     onScheduleEdit: (ScheduleItem) -> Unit,
     onScheduleDelete: (String, String) -> Unit,
     onScheduleMove: (String, ScheduleItem, Int, String) -> Unit,
+    onScheduleMoveToIndex: (String, ScheduleItem, Int, String) -> Unit,
     onScheduleSaved: () -> Unit,
     onScheduleErrorShown: () -> Unit,
     onPackingTitleChange: (String) -> Unit,
     onPackingAdd: (Trip, UserProfile) -> Unit,
     onPackingCheckedChange: (String, PackingItem, Boolean, String) -> Unit,
     onPackingDelete: (String, String) -> Unit,
-    onPackingErrorShown: () -> Unit
+    onPackingErrorShown: () -> Unit,
+    onBudgetStartCreate: (String) -> Unit,
+    onBudgetStartEdit: (com.tripmate.app.data.ExpenseItem) -> Unit,
+    onBudgetSelectScheduleItem: (ScheduleItem?) -> Unit,
+    onBudgetDateChange: (String) -> Unit,
+    onBudgetTitleChange: (String) -> Unit,
+    onBudgetCategoryChange: (String) -> Unit,
+    onBudgetAmountChange: (String) -> Unit,
+    onBudgetMemoChange: (String) -> Unit,
+    onBudgetSave: (Trip, UserProfile) -> Unit,
+    onBudgetDelete: (String, String) -> Unit,
+    onBudgetErrorShown: () -> Unit
 ) {
     val user = authUiState.user
     var appScreen by remember(user?.id) { mutableStateOf(AppScreen.Home) }
@@ -228,6 +260,7 @@ fun TripMateApp(
         if (selectedTrip != null) {
             onObserveSchedule(selectedTrip)
             onObservePacking(selectedTrip)
+            onObserveBudget(selectedTrip)
         }
     }
 
@@ -360,6 +393,7 @@ fun TripMateApp(
                 trip = selectedTrip,
                 uiState = scheduleUiState,
                 packingUiState = packingUiState,
+                budgetUiState = budgetUiState,
                 canEditTrip = selectedTrip.ownerId == user.id,
                 onEditTripClick = {
                     onLoadEditTrip(selectedTrip)
@@ -376,11 +410,23 @@ fun TripMateApp(
                 },
                 onDeleteClick = { itemId -> onScheduleDelete(selectedTrip.id, itemId) },
                 onMoveClick = { item, direction -> onScheduleMove(selectedTrip.id, item, direction, user.id) },
+                onMoveToIndex = { item, targetIndex -> onScheduleMoveToIndex(selectedTrip.id, item, targetIndex, user.id) },
                 onPackingTitleChange = onPackingTitleChange,
                 onPackingAddClick = { onPackingAdd(selectedTrip, user) },
                 onPackingCheckedChange = { item, isChecked -> onPackingCheckedChange(selectedTrip.id, item, isChecked, user.id) },
                 onPackingDeleteClick = { itemId -> onPackingDelete(selectedTrip.id, itemId) },
                 onPackingErrorShown = onPackingErrorShown,
+                onBudgetStartCreate = onBudgetStartCreate,
+                onBudgetStartEdit = onBudgetStartEdit,
+                onBudgetSelectScheduleItem = onBudgetSelectScheduleItem,
+                onBudgetDateChange = onBudgetDateChange,
+                onBudgetTitleChange = onBudgetTitleChange,
+                onBudgetCategoryChange = onBudgetCategoryChange,
+                onBudgetAmountChange = onBudgetAmountChange,
+                onBudgetMemoChange = onBudgetMemoChange,
+                onBudgetSaveClick = { onBudgetSave(selectedTrip, user) },
+                onBudgetDeleteClick = { itemId -> onBudgetDelete(selectedTrip.id, itemId) },
+                onBudgetErrorShown = onBudgetErrorShown,
                 onErrorShown = onScheduleErrorShown,
                 modifier = Modifier.padding(innerPadding)
             )
@@ -430,6 +476,7 @@ private fun LoginPreview() {
             joinTripUiState = JoinTripUiState(),
             scheduleUiState = ScheduleUiState(),
             packingUiState = PackingUiState(),
+            budgetUiState = BudgetUiState(),
             onGoogleSignInClick = {},
             onCreateTrip = {},
             onTitleChange = {},
@@ -467,6 +514,7 @@ private fun LoginPreview() {
             onObserveTrips = {},
             onObserveSchedule = {},
             onObservePacking = {},
+            onObserveBudget = {},
             onScheduleStartCreate = {},
             onScheduleDateChange = {},
             onScheduleTimeChange = {},
@@ -480,13 +528,25 @@ private fun LoginPreview() {
             onScheduleEdit = {},
             onScheduleDelete = { _, _ -> },
             onScheduleMove = { _, _, _, _ -> },
+            onScheduleMoveToIndex = { _, _, _, _ -> },
             onScheduleSaved = {},
             onScheduleErrorShown = {},
             onPackingTitleChange = {},
             onPackingAdd = { _, _ -> },
             onPackingCheckedChange = { _, _, _, _ -> },
             onPackingDelete = { _, _ -> },
-            onPackingErrorShown = {}
+            onPackingErrorShown = {},
+            onBudgetStartCreate = {},
+            onBudgetStartEdit = {},
+            onBudgetSelectScheduleItem = {},
+            onBudgetDateChange = {},
+            onBudgetTitleChange = {},
+            onBudgetCategoryChange = {},
+            onBudgetAmountChange = {},
+            onBudgetMemoChange = {},
+            onBudgetSave = { _, _ -> },
+            onBudgetDelete = { _, _ -> },
+            onBudgetErrorShown = {}
         )
     }
 }
@@ -510,6 +570,7 @@ private fun HomePreview() {
             joinTripUiState = JoinTripUiState(),
             scheduleUiState = ScheduleUiState(),
             packingUiState = PackingUiState(),
+            budgetUiState = BudgetUiState(),
             onGoogleSignInClick = {},
             onCreateTrip = {},
             onTitleChange = {},
@@ -547,6 +608,7 @@ private fun HomePreview() {
             onObserveTrips = {},
             onObserveSchedule = {},
             onObservePacking = {},
+            onObserveBudget = {},
             onScheduleStartCreate = {},
             onScheduleDateChange = {},
             onScheduleTimeChange = {},
@@ -560,16 +622,30 @@ private fun HomePreview() {
             onScheduleEdit = {},
             onScheduleDelete = { _, _ -> },
             onScheduleMove = { _, _, _, _ -> },
+            onScheduleMoveToIndex = { _, _, _, _ -> },
             onScheduleSaved = {},
             onScheduleErrorShown = {},
             onPackingTitleChange = {},
             onPackingAdd = { _, _ -> },
             onPackingCheckedChange = { _, _, _, _ -> },
             onPackingDelete = { _, _ -> },
-            onPackingErrorShown = {}
+            onPackingErrorShown = {},
+            onBudgetStartCreate = {},
+            onBudgetStartEdit = {},
+            onBudgetSelectScheduleItem = {},
+            onBudgetDateChange = {},
+            onBudgetTitleChange = {},
+            onBudgetCategoryChange = {},
+            onBudgetAmountChange = {},
+            onBudgetMemoChange = {},
+            onBudgetSave = { _, _ -> },
+            onBudgetDelete = { _, _ -> },
+            onBudgetErrorShown = {}
         )
     }
 }
+
+
 
 
 
